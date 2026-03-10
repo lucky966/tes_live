@@ -1,0 +1,6 @@
+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
+
+npm init -y
+npm install express sqlite3 dotenv fluent-ffmpeg multer
+npm install node-cron
+node server.js

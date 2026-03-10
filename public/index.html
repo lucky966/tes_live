@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ternak Live - Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Sembunyikan scrollbar agar lebih rapi */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f1f1f; }
+        ::-webkit-scrollbar-thumb { background: #3f3f3f; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="bg-[#0f0f0f] text-gray-200 font-sans antialiased">
+
+    <header class="bg-[#1f1f1f] border-b border-[#3f3f3f] p-4 flex justify-between items-center sticky top-0 z-10">
+        <div class="flex items-center gap-3">
+            <span class="text-red-500 text-2xl">▶</span>
+            <h1 class="text-xl font-bold text-white">Ternak Live Studio</h1>
+        </div>
+        <button onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="bg-white text-black px-4 py-2 text-sm font-semibold rounded-full hover:bg-gray-200 transition">
+            + BUAT (Upload Video)
+        </button>
+    </header>
+
+    <main class="p-6 max-w-7xl mx-auto">
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-white">📡 Sedang Live</h2>
+            <div id="monitor" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-gray-500 text-sm italic">Membaca status...</p>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-lg font-semibold mb-4 text-white">Konten Channel</h2>
+            <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-[#282828] text-gray-400 border-b border-[#3f3f3f]">
+                        <tr>
+                            <th class="p-4 font-medium">Video</th>
+                            <th class="p-4 font-medium">Tanggal Upload</th>
+                            <th class="p-4 font-medium text-right">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gallery" class="divide-y divide-[#3f3f3f]">
+                        </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="uploadModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-md p-6 border border-[#3f3f3f]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">Upload Video Baru</h3>
+                <button onclick="document.getElementById('uploadModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <form action="/api/upload" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Judul Video</label>
+                    <input type="text" name="title" required class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Pilih File Video (MP4)</label>
+                    <input type="file" name="videoFile" accept="video/*" required class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-[#3f3f3f] file:text-white hover:file:bg-[#4f4f4f] cursor-pointer">
+                </div>
+                <button type="submit" class="w-full bg-blue-500 text-white font-semibold py-2 rounded hover:bg-blue-600 transition">Upload</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-90 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-4xl p-4 border border-[#3f3f3f] relative">
+            <button onclick="closePreview()" class="absolute -top-10 right-0 text-white hover:text-red-500 text-3xl">&times; Tutup</button>
+            <h3 id="previewTitle" class="text-lg font-semibold text-white mb-3">Preview</h3>
+            <video id="videoPlayer" controls class="w-full max-h-[70vh] rounded bg-black">
+                <source id="videoSource" src="" type="video/mp4">
+                Browser Anda tidak mendukung tag video.
+            </video>
+        </div>
+    </div>
+
+    <div id="scheduleModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-md p-6 border border-[#3f3f3f]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">Jadwalkan Live Streaming</h3>
+                <button onclick="document.getElementById('scheduleModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <input type="hidden" id="schedVideoId">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Stream Key YouTube</label>
+                    <input type="password" id="schedKey" placeholder="Paste Stream Key di sini" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Jadwal Mulai</label>
+                    <input type="datetime-local" id="schedTime" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white focus:outline-none focus:border-blue-500 css-invert-calendar">
+                    <style> /* Trik agar icon kalender terlihat di dark mode */ input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; } </style>
+                </div>
+                <button onclick="submitSchedule()" class="w-full bg-blue-500 text-white font-semibold py-2 rounded hover:bg-blue-600 transition">Simpan Jadwal</button>
+                <p id="schedStatus" class="text-sm text-center mt-2 hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. MONITORING LIVE ---
+        async function loadActiveStreams() {
+            const monitor = document.getElementById('monitor');
+            try {
+                const response = await fetch('/api/active');
+                const data = await response.json();
+
+                if (data.active.length === 0) {
+                    monitor.innerHTML = '<p class="text-gray-500 text-sm">Tidak ada siaran yang sedang berjalan saat ini.</p>';
+                    return;
+                }
+
+                monitor.innerHTML = ''; 
+                data.active.forEach(stream => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-[#1f1f1f] border border-red-900/50 p-4 rounded-lg flex flex-col justify-between';
+                    div.innerHTML = `
+                        <div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="animate-pulse h-3 w-3 bg-red-600 rounded-full"></span>
+                                <h3 class="font-medium text-white line-clamp-1">${stream.title}</h3>
+                            </div>
+                            <p class="text-xs text-gray-400 mb-4">Dimulai: ${new Date(stream.scheduled_time).toLocaleString('id-ID')}</p>
+                        </div>
+                        <button onclick="stopStream(${stream.video_id})" class="text-sm bg-red-600/20 text-red-500 border border-red-600/50 py-1.5 rounded hover:bg-red-600 hover:text-white transition">⏹ Akhiri Siaran</button>
+                    `;
+                    monitor.appendChild(div);
+                });
+            } catch (error) {
+                monitor.innerHTML = '<p class="text-red-500 text-sm">Gagal memuat monitor.</p>';
+            }
+        }
+        setInterval(loadActiveStreams, 5000);
+        loadActiveStreams();
+
+        async function stopStream(videoId) {
+            if (!confirm('Akhiri siaran ini sekarang?')) return;
+            try {
+                await fetch(`/api/stop/${videoId}`, { method: 'POST' });
+                loadActiveStreams(); 
+            } catch (error) { alert('Gagal menghentikan streaming.'); }
+        }
+
+        // --- 2. GALERI VIDEO (TABLE) ---
+        async function loadVideos() {
+            const gallery = document.getElementById('gallery');
+            try {
+                const response = await fetch('/api/videos');
+                const data = await response.json();
+
+                if (data.videos.length === 0) {
+                    gallery.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">Belum ada video. Silakan upload terlebih dahulu.</td></tr>';
+                    return;
+                }
+
+                gallery.innerHTML = ''; 
+                data.videos.forEach(video => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-[#333333] transition group';
+                    const tanggal = new Date(video.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                    
+                    // Kita asumsikan file di database tersimpan dengan prefix uploads\ atau uploads/
+                    // Pastikan path menggunakan / agar bisa dibaca browser
+                    const videoUrl = '/' + video.filepath.replace(/\\/g, '/');
+
+                    tr.innerHTML = `
+                        <td class="p-4 flex items-center gap-4">
+                            <div class="w-24 h-14 bg-black rounded flex items-center justify-center border border-[#3f3f3f] relative overflow-hidden group-hover:border-gray-500 transition cursor-pointer" onclick="openPreview('${video.title}', '${videoUrl}')">
+                                <span class="text-xs text-gray-400">▶ Play</span>
+                            </div>
+                            <div>
+                                <p class="text-white font-medium">${video.title}</p>
+                                <p class="text-xs text-gray-500">${video.filename}</p>
+                            </div>
+                        </td>
+                        <td class="p-4 text-gray-400">${tanggal}</td>
+                        <td class="p-4 text-right">
+                            <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onclick="openPreview('${video.title}', '${videoUrl}')" class="text-gray-400 hover:text-white px-2 py-1"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>
+                                <button onclick="openSchedule(${video.id})" class="bg-[#3ea6ff] text-black text-xs font-semibold px-3 py-1.5 rounded hover:bg-[#65b8ff] transition">Jadwalkan</button>
+                            </div>
+                        </td>
+                    `;
+                    gallery.appendChild(tr);
+                });
+            } catch (error) { gallery.innerHTML = '<tr><td colspan="3" class="text-center text-red-500 p-4">Error memuat video.</td></tr>'; }
+        }
+        loadVideos();
+
+        // --- 3. FITUR PREVIEW VIDEO ---
+        function openPreview(title, url) {
+            document.getElementById('previewTitle').innerText = title;
+            const player = document.getElementById('videoPlayer');
+            player.src = url;
+            document.getElementById('previewModal').classList.remove('hidden');
+            player.play(); // Otomatis mainkan
+        }
+
+        function closePreview() {
+            const player = document.getElementById('videoPlayer');
+            player.pause(); // Hentikan video saat popup ditutup
+            player.src = "";
+            document.getElementById('previewModal').classList.add('hidden');
+        }
+
+        // --- 4. FITUR JADWALKAN ---
+        function openSchedule(videoId) {
+            document.getElementById('schedVideoId').value = videoId;
+            document.getElementById('schedStatus').classList.add('hidden');
+            document.getElementById('scheduleModal').classList.remove('hidden');
+        }
+
+        async function submitSchedule() {
+            const videoId = document.getElementById('schedVideoId').value;
+            const rtmpUrl = 'rtmp://a.rtmp.youtube.com/live2'; 
+            const streamKey = document.getElementById('schedKey').value;
+            const scheduledTime = document.getElementById('schedTime').value;
+            const statusText = document.getElementById('schedStatus');
+
+            if (!streamKey || !scheduledTime) {
+                alert('Tolong isi Stream Key dan Waktu Jadwal!');
+                return;
+            }
+
+            statusText.innerText = 'Menyimpan jadwal...';
+            statusText.className = 'text-sm text-center mt-2 text-yellow-500 block';
+
+            try {
+                const response = await fetch(`/api/schedule/${videoId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rtmpUrl, streamKey, scheduledTime })
+                });
+
+                const data = await response.json();
+                statusText.innerText = '✔️ ' + data.message;
+                statusText.className = 'text-sm text-center mt-2 text-green-500 block';
+                
+                // Tutup popup setelah 2 detik
+                setTimeout(() => {
+                    document.getElementById('scheduleModal').classList.add('hidden');
+                    document.getElementById('schedKey').value = '';
+                }, 2000);
+
+            } catch (error) {
+                statusText.innerText = '❌ Gagal menyimpan jadwal.';
+                statusText.className = 'text-sm text-center mt-2 text-red-500 block';
+            }
+        }
+    </script>
+</body>
+</html>
