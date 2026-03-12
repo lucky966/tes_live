@@ -1,0 +1,59 @@
+<%- contentFor('pageTitle') %>
+    🗄️ Arsip & Riwayat Live
+
+    <%- contentFor('body') %>
+        <section>
+            <div class="flex justify-between items-center mb-6 border-b border-[#3f3f3f] pb-2">
+                <h2 class="text-lg font-semibold text-white">Riwayat Siaran Sebelumnya</h2>
+                <p class="text-sm text-gray-400">Gunakan ulang jadwal lama agar tidak capek mengetik</p>
+            </div>
+            <div id="archiveContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-gray-500 text-sm italic">Memuat riwayat...</p>
+            </div>
+        </section>
+
+        <script>
+            async function loadArchives() {
+                const container = document.getElementById('archiveContainer');
+                try {
+                    const response = await fetch('/api/archives');
+                    const data = await response.json();
+
+                    if (data.archives.length === 0) {
+                        container.innerHTML = '<p class="text-gray-500 text-sm">Belum ada riwayat siaran (semua bersih).</p>'; return;
+                    }
+
+                    container.innerHTML = '';
+                    data.archives.forEach(stream => {
+                        let statusBadge = '';
+                        if (stream.status === 'finished') statusBadge = '<span class="text-xs bg-green-900/50 text-green-400 px-2 py-1 rounded">Selesai Alami</span>';
+                        if (stream.status === 'stopped') statusBadge = '<span class="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">Dihentikan Manual</span>';
+                        if (stream.status === 'error') statusBadge = '<span class="text-xs bg-red-900/50 text-red-400 px-2 py-1 rounded">Terjadi Error</span>';
+
+                        const div = document.createElement('div');
+                        div.className = 'bg-[#1a1a1a] border border-[#3f3f3f] p-4 rounded-lg flex flex-col justify-between opacity-80 hover:opacity-100 transition';
+
+                        div.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-3">
+                            <h3 class="font-medium text-gray-300 line-clamp-1">${stream.title}</h3>
+                            ${statusBadge}
+                        </div>
+                        <p class="text-xs text-gray-500 mb-1">Terakhir Mulai: ${new Date(stream.scheduled_time).toLocaleString('id-ID')}</p>
+                    </div>
+                    <div class="flex gap-2 mt-5 border-t border-[#3f3f3f] pt-3">
+                        <button onclick="openScheduleModal(${stream.video_id}, '${stream.stream_key}')" class="flex-grow text-xs bg-blue-600/20 text-blue-400 border border-blue-600/50 py-1.5 rounded hover:bg-blue-600 hover:text-white transition">
+                            ♻️ Gunakan Ulang
+                        </button>
+                        <button onclick="hapusStream(${stream.id})" class="text-xs bg-[#3f3f3f] text-gray-400 px-3 py-1.5 rounded hover:bg-red-900 hover:text-white transition">
+                            🗑️ Hapus
+                        </button>
+                    </div>
+                `;
+                        container.appendChild(div);
+                    });
+                } catch (error) { console.error(error); }
+            }
+
+            loadArchives();
+        </script>

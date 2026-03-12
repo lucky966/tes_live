@@ -1,167 +1,130 @@
 require('dotenv').config();
 const express = require('express');
+const expressLayouts = require('express-ejs-layouts');
 const db = require('./config/database');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
-
-// --- PENGATURAN FFMPEG ---
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('ffmpeg-static');
-ffmpeg.setFfmpegPath(ffmpegInstaller);
 
-// --- BUKU CATATAN PROSES FFMPEG (BARU) ---
-// Digunakan untuk menyimpan remot kontrol agar bisa di-stop
-const activeStreams = new Map();
+ffmpeg.setFfmpegPath(ffmpegInstaller); 
+const activeStreams = new Map(); 
 
 const app = express();
 const PORT = process.env.PORT || 7575;
 
-if (!fs.existsSync('./uploads')) {
-    fs.mkdirSync('./uploads');
-}
+app.use(expressLayouts);
+app.set('layout', 'layout'); 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+if (!fs.existsSync('./uploads')) fs.mkdirSync('./uploads');
 
 app.use(express.static('public'));
-// BARIS BARU: Mengizinkan frontend untuk memutar video di folder uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- KONFIGURASI MULTER ---
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, './uploads/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
-    }
+    destination: (req, file, cb) => cb(null, './uploads/'),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
 const upload = multer({ storage: storage });
 
-// --- RUTE UNTUK UPLOAD VIDEO ---
+// --- RUTE HALAMAN (FRONTEND) ---
+app.get('/', (req, res) => {
+    const sql = `SELECT streams.*, videos.title FROM streams JOIN videos ON streams.video_id = videos.id WHERE streams.status IN ('live', 'pending') ORDER BY streams.scheduled_time ASC`;
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).send('Database Error.');
+        res.render('dashboard', { pageTitle: 'Dashboard Ringkasan', schedules: rows, currentPath: req.path });
+    });
+});
+app.get('/lives', (req, res) => res.render('lives', { pageTitle: 'Manajemen Konten Live', currentPath: req.path }));
+app.get('/videos', (req, res) => res.render('videos', { pageTitle: 'Koleksi Berkas Video', currentPath: req.path }));
+app.get('/archives', (req, res) => res.render('archives', { pageTitle: 'Arsip & Riwayat Live', currentPath: req.path })); // HALAMAN BARU
+
+// --- API CRUD ---
 app.post('/api/upload', upload.single('videoFile'), (req, res) => {
-    const file = req.file;
-    const title = req.body.title;
-
-    if (!file) return res.status(400).send('Tolong pilih file video terlebih dahulu.');
-
-    const sql = `INSERT INTO videos (title, filename, filepath) VALUES (?, ?, ?)`;
-    db.run(sql, [title, file.filename, file.path], function (err) {
-        if (err) return res.status(500).send('Terjadi kesalahan database.');
-        res.send(`<h3>Upload Berhasil!</h3><p>Video <b>${title}</b> tersimpan.</p><a href="/">Kembali</a>`);
+    if (!req.file) return res.status(400).send('Pilih video!');
+    db.run(`INSERT INTO videos (title, filename, filepath) VALUES (?, ?, ?)`, [req.body.title, req.file.filename, req.file.path], function (err) {
+        if (err) return res.status(500).send('Error DB.');
+        res.redirect('/videos'); 
     });
 });
-
-// --- RUTE UNTUK MENGAMBIL DAFTAR VIDEO ---
 app.get('/api/videos', (req, res) => {
-    db.all('SELECT * FROM videos ORDER BY created_at DESC', [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ videos: rows });
+    db.all('SELECT * FROM videos ORDER BY created_at DESC', [], (err, rows) => res.json({ videos: rows }));
+});
+app.post('/api/schedule', (req, res) => {
+    const { videoId, streamKey, scheduledTime, endTime, isDaily } = req.body;
+    const rtmpUrl = 'rtmp://a.rtmp.youtube.com/live2';
+    if (!videoId || !streamKey || !scheduledTime || !endTime) return res.status(400).send('Lengkapi form!');
+    db.run(`INSERT INTO streams (video_id, platform_name, stream_url, stream_key, scheduled_time, end_time, is_daily, status) VALUES (?, 'YouTube', ?, ?, ?, ?, ?, 'pending')`, 
+    [videoId, rtmpUrl, streamKey, scheduledTime, endTime, isDaily ? 1 : 0], function (err) {
+        if (err) return res.status(500).send('Gagal.');
+        res.json({ message: 'Jadwal dibuat!' });
+    });
+});
+app.get('/api/active-and-pending', (req, res) => {
+    db.all(`SELECT streams.*, videos.title FROM streams JOIN videos ON streams.video_id = videos.id WHERE streams.status IN ('live', 'pending') ORDER BY streams.scheduled_time ASC`, [], (err, rows) => res.json({ schedules: rows }));
+});
+
+// --- API BARU: ARSIP, EDIT, HAPUS ---
+app.get('/api/archives', (req, res) => {
+    db.all(`SELECT streams.*, videos.title FROM streams JOIN videos ON streams.video_id = videos.id WHERE streams.status IN ('finished', 'stopped', 'error') ORDER BY streams.created_at DESC`, [], (err, rows) => res.json({ archives: rows }));
+});
+app.post('/api/update/:id', (req, res) => {
+    const { streamKey, scheduledTime, endTime, isDaily } = req.body;
+    db.run(`UPDATE streams SET stream_key = ?, scheduled_time = ?, end_time = ?, is_daily = ? WHERE id = ?`, 
+    [streamKey, scheduledTime, endTime, isDaily ? 1 : 0, req.params.id], function (err) {
+        if (err) return res.status(500).send('Gagal update.');
+        res.json({ message: 'Jadwal diperbarui!' });
+    });
+});
+app.post('/api/delete/:id', (req, res) => {
+    db.run(`DELETE FROM streams WHERE id = ?`, [req.params.id], function(err) {
+        if (err) return res.status(500).send('Gagal hapus.');
+        res.json({ message: 'Riwayat dihapus!' });
+    });
+});
+// ------------------------------------
+
+app.post('/api/stop/:streamId', (req, res) => {
+    const streamId = req.params.streamId;
+    db.get('SELECT video_id FROM streams WHERE id = ?', [streamId], (err, row) => {
+        if (row && activeStreams.has(row.video_id)) {
+            activeStreams.get(row.video_id).kill('SIGKILL'); activeStreams.delete(row.video_id);
+        }
+        db.run(`UPDATE streams SET status = 'stopped' WHERE id = ?`, [streamId]);
+        res.json({ message: 'Siaran dihentikan!' });
     });
 });
 
-// --- RUTE UNTUK MELIHAT STREAMING YANG SEDANG AKTIF (BARU) ---
-app.get('/api/active', (req, res) => {
-    const sql = `
-        SELECT streams.*, videos.title 
-        FROM streams 
-        JOIN videos ON streams.video_id = videos.id 
-        WHERE streams.status = 'live'
-    `;
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ active: rows });
-    });
-});
-
-// --- RUTE UNTUK MENGHENTIKAN STREAMING (BARU) ---
-app.post('/api/stop/:videoId', (req, res) => {
-    const videoId = parseInt(req.params.videoId);
-
-    // Mengecek apakah remot kontrol FFmpeg-nya ada di buku catatan kita
-    if (activeStreams.has(videoId)) {
-        const command = activeStreams.get(videoId);
-        command.kill('SIGKILL'); // Mematikan paksa FFmpeg
-        activeStreams.delete(videoId); // Hapus dari buku catatan
-
-        // Ubah status di database
-        db.run(`UPDATE streams SET status = 'stopped' WHERE video_id = ? AND status = 'live'`, [videoId]);
-        res.json({ message: 'Streaming berhasil dihentikan!' });
-    } else {
-        res.status(404).json({ message: 'Tidak ada streaming aktif untuk video ini di memori.' });
-    }
-});
-
-// --- FUNGSI UNTUK MENJALANKAN FFMPEG (DIPERBARUI) ---
+// --- MESIN FFMPEG & CRON ---
 function jalankanStreaming(videoPath, streamDestination, videoTitle, videoId, streamId) {
-    console.log(`[STREAMING] Memulai siaran untuk video: ${videoTitle}`);
-
-    const command = ffmpeg(videoPath)
-        .inputOptions(['-re', '-stream_loop', '-1'])
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .format('flv')
+    console.log(`[START] Siaran: ${videoTitle}`);
+    const command = ffmpeg(videoPath).inputOptions(['-re', '-stream_loop', '-1']).videoCodec('libx264').audioCodec('aac').format('flv')
         .outputOptions(['-preset veryfast', '-maxrate 2500k', '-bufsize 5000k', '-pix_fmt yuv420p', '-g 50'])
-        .on('start', () => console.log(`[FFMPEG] Proses berjalan untuk: ${videoTitle}`))
-        .on('error', (err) => {
-            console.error('[FFMPEG ERROR/STOPPED]:', err.message);
-            activeStreams.delete(videoId);
-            db.run(`UPDATE streams SET status = 'error_or_stopped' WHERE id = ?`, [streamId]);
-        })
-        .on('end', () => {
-            console.log(`[STREAMING] Selesai: ${videoTitle}`);
-            activeStreams.delete(videoId);
-            db.run(`UPDATE streams SET status = 'finished' WHERE id = ?`, [streamId]);
-        });
-
-    command.save(streamDestination);
-
-    // Simpan remot kontrolnya ke dalam buku catatan (berdasarkan ID Video)
-    activeStreams.set(videoId, command);
+        .on('error', (err) => { activeStreams.delete(videoId); db.run(`UPDATE streams SET status = 'error' WHERE id = ?`, [streamId]); })
+        .on('end', () => activeStreams.delete(videoId));
+    command.save(streamDestination); activeStreams.set(videoId, command);
 }
-
-// --- RUTE UNTUK MENYIMPAN JADWAL STREAMING ---
-app.post('/api/schedule/:id', (req, res) => {
-    const videoId = req.params.id;
-    const { rtmpUrl, streamKey, scheduledTime } = req.body;
-
-    if (!streamKey || !scheduledTime) return res.status(400).send('Stream Key dan Waktu wajib diisi!');
-
-    const sql = `INSERT INTO streams (video_id, platform_name, stream_url, stream_key, scheduled_time, status) 
-                 VALUES (?, 'YouTube', ?, ?, ?, 'pending')`;
-
-    db.run(sql, [videoId, rtmpUrl, streamKey, scheduledTime], function (err) {
-        if (err) return res.status(500).send('Gagal menyimpan jadwal.');
-        res.json({ message: `Jadwal berhasil disimpan untuk waktu: ${scheduledTime}` });
-    });
-});
-
-// --- CRON JOB: PENGECEKAN JADWAL SETIAP MENIT ---
 cron.schedule('* * * * *', () => {
-    const sql = `
-        SELECT streams.*, videos.filepath, videos.title 
-        FROM streams 
-        JOIN videos ON streams.video_id = videos.id 
-        WHERE streams.status = 'pending' AND datetime(streams.scheduled_time) <= datetime('now', 'localtime')
-    `;
-
-    db.all(sql, [], (err, rows) => {
-        if (err) return console.error('[CRON ERROR]', err.message);
-
+    db.all(`SELECT streams.*, videos.filepath, videos.title FROM streams JOIN videos ON streams.video_id = videos.id WHERE streams.status = 'pending' AND datetime(streams.scheduled_time) <= datetime('now', 'localtime')`, [], (err, rows) => {
         rows.forEach(stream => {
-            const videoPath = path.resolve(__dirname, stream.filepath);
-            const streamDestination = `${stream.stream_url}/${stream.stream_key}`;
-
             db.run(`UPDATE streams SET status = 'live' WHERE id = ?`, [stream.id]);
-
-            // Panggil FFmpeg dan kirim juga ID Video dan ID Stream
-            jalankanStreaming(videoPath, streamDestination, stream.title, stream.video_id, stream.id);
+            jalankanStreaming(path.resolve(__dirname, stream.filepath), `${stream.stream_url}/${stream.stream_key}`, stream.title, stream.video_id, stream.id);
+        });
+    });
+    db.all(`SELECT * FROM streams WHERE status = 'live' AND datetime(end_time) <= datetime('now', 'localtime')`, [], (err, rows) => {
+        rows.forEach(stream => {
+            if (activeStreams.has(stream.video_id)) { activeStreams.get(stream.video_id).kill('SIGKILL'); activeStreams.delete(stream.video_id); }
+            if (stream.is_daily === 1) {
+                db.run(`UPDATE streams SET status = 'pending', scheduled_time = datetime(scheduled_time, '+1 day'), end_time = datetime(end_time, '+1 day') WHERE id = ?`, [stream.id]);
+            } else { db.run(`UPDATE streams SET status = 'finished' WHERE id = ?`, [stream.id]); }
         });
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server berhasil berjalan di http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server Studio berjalan di http://localhost:${PORT}`));

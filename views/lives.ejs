@@ -1,0 +1,66 @@
+<%- contentFor('pageTitle') %>
+Manajemen Konten Live
+
+<%- contentFor('body') %>
+<section>
+    <div class="flex justify-between items-center mb-6 border-b border-[#3f3f3f] pb-2">
+        <h2 class="text-lg font-semibold text-white">Daftar Siaran Aktif & Terjadwal</h2>
+    </div>
+    <div id="liveMonitorContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <p class="text-gray-500 text-sm italic">Memuat status...</p>
+    </div>
+</section>
+
+<script>
+    async function loadLiveMonitor() {
+        const container = document.getElementById('liveMonitorContainer');
+        try {
+            const response = await fetch('/api/active-and-pending');
+            const data = await response.json();
+
+            if (data.schedules.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm">Tidak ada siaran atau jadwal yang aktif.</p>'; return;
+            }
+
+            container.innerHTML = '';
+            data.schedules.forEach(stream => {
+                const isLive = stream.status === 'live';
+                const div = document.createElement('div');
+                div.className = `border p-4 rounded-lg flex flex-col justify-between ${isLive ? 'bg-red-900/20 border-red-500' : 'bg-[#1f1f1f] border-[#3f3f3f]'}`;
+                
+                // Jika status pending, sediakan tombol Edit
+                const editButton = !isLive ? `<button onclick="openScheduleModal(${stream.video_id}, '${stream.stream_key}', ${stream.id}, '${stream.scheduled_time}', '${stream.end_time}', ${stream.is_daily})" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-500 transition">✏️ Edit</button>` : '';
+
+                div.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">
+                                ${isLive ? '<span class="animate-pulse h-3 w-3 bg-red-600 rounded-full"></span>' : '<span>⏳</span>'}
+                                <h3 class="font-medium text-white line-clamp-1">${stream.title}</h3>
+                            </div>
+                            ${editButton}
+                        </div>
+                        <p class="text-xs text-gray-400 mb-1">Mulai: ${new Date(stream.scheduled_time).toLocaleString('id-ID')}</p>
+                        <p class="text-xs text-gray-400 mb-3">Selesai: ${new Date(stream.end_time).toLocaleString('id-ID')}</p>
+                        ${stream.is_daily ? '<span class="bg-blue-900 text-blue-300 text-xs px-2 py-1 rounded inline-block mb-2">🔁 Diulang Setiap Hari</span>' : ''}
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                        <button onclick="stopStream(${stream.id}, '${isLive}')" class="flex-grow text-xs bg-gray-700 text-white py-1.5 rounded hover:bg-gray-600 transition">
+                            ${isLive ? '⏹ STOP LIVE' : '❌ BATALKAN'}
+                        </button>
+                        <button onclick="hapusStream(${stream.id})" class="text-xs bg-red-900/50 text-red-400 px-3 py-1.5 rounded hover:bg-red-900 transition" title="Hapus Permanen">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        } catch (error) {}
+    }
+
+    async function stopStream(streamId, isLive) {
+        if (!confirm(isLive === 'true' ? 'Hentikan siaran ini?' : 'Batalkan jadwal ini?')) return;
+        await fetch(`/api/stop/${streamId}`, { method: 'POST' });
+        loadLiveMonitor();
+    }
+    
+    loadLiveMonitor(); setInterval(loadLiveMonitor, 5000); 
+</script>

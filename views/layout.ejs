@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ternak Live - Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f1f1f; }
+        ::-webkit-scrollbar-thumb { background: #3f3f3f; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-[#0f0f0f] text-gray-200 font-sans antialiased flex">
+
+    <nav class="bg-[#1f1f1f] border-r border-[#3f3f3f] w-64 h-screen fixed flex flex-col p-4 space-y-2 z-20">
+        <div class="flex items-center gap-3 mb-6 p-2">
+            <span class="text-blue-500 text-3xl">▶</span>
+            <h1 class="text-xl font-bold text-white">Live Studio</h1>
+        </div>
+        
+        <a href="/" class="flex items-center gap-3 p-3 rounded-md hover:bg-[#333333] transition <%= typeof currentPath !== 'undefined' && currentPath === '/' ? 'bg-[#333333] font-semibold text-white' : '' %>">
+            📊 Dashboard
+        </a>
+        <a href="/lives" class="flex items-center gap-3 p-3 rounded-md hover:bg-[#333333] transition <%= typeof currentPath !== 'undefined' && currentPath === '/lives' ? 'bg-[#333333] font-semibold text-white' : '' %>">
+            📡 Konten Live
+        </a>
+        <a href="/videos" class="flex items-center gap-3 p-3 rounded-md hover:bg-[#333333] transition <%= typeof currentPath !== 'undefined' && currentPath === '/videos' ? 'bg-[#333333] font-semibold text-white' : '' %>">
+            📥 Berkas Video
+        </a>
+        
+        <div class="flex-grow"></div> 
+        
+        <a href="/archives" class="flex items-center gap-3 p-3 rounded-md hover:bg-[#333333] transition <%= typeof currentPath !== 'undefined' && currentPath === '/archives' ? 'bg-[#333333] font-semibold text-white' : 'text-gray-400' %>">
+            🗄️ Arsip Live
+        </a>
+    </nav>
+
+    <main class="ml-64 flex-grow p-6">
+        <header class="flex justify-between items-center mb-8 pb-4 border-b border-[#3f3f3f]">
+            <h1 class="text-2xl font-bold text-white"><%= pageTitle || 'Ternak Live' %></h1>
+            <div class="flex gap-3">
+                <button onclick="openUploadModal()" class="bg-[#3f3f3f] text-white px-4 py-2 text-sm font-semibold rounded hover:bg-[#4f4f4f] transition">
+                    + Upload Video
+                </button>
+                <button onclick="openScheduleModal()" class="bg-red-600 text-white px-4 py-2 text-sm font-semibold rounded hover:bg-red-700 transition">
+                    📡 Buat Live Baru
+                </button>
+            </div>
+        </header>
+
+        <%- body %>
+    </main>
+
+    <div id="uploadModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-md p-6 border border-[#3f3f3f]">
+            <div class="flex justify-between items-center mb-4"><h3 class="text-lg font-semibold text-white">Upload Video Baru</h3><button onclick="document.getElementById('uploadModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button></div>
+            <form action="/api/upload" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <div><label class="block text-sm text-gray-400 mb-1">Judul Video</label><input type="text" name="title" required class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white"></div>
+                <div><label class="block text-sm text-gray-400 mb-1">Pilih File Video (MP4)</label><input type="file" name="videoFile" accept="video/*" required class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-[#3f3f3f] file:text-white cursor-pointer"></div>
+                <button type="submit" class="w-full bg-blue-500 text-white font-semibold py-2 rounded">Upload</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="scheduleModal" class="fixed inset-0 bg-black bg-opacity-70 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-md p-6 border border-[#3f3f3f]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modalLiveTitle" class="text-lg font-semibold text-white">Buat Jadwal Live</h3>
+                <button onclick="document.getElementById('scheduleModal').classList.add('hidden')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <input type="hidden" id="editStreamId" value=""> <div>
+                    <label class="block text-sm text-gray-400 mb-1">Pilih Video</label>
+                    <select id="liveVideoSelect" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white"><option value="">-- Memuat Video --</option></select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Stream Key YouTube</label>
+                    <input type="password" id="liveKey" placeholder="Paste Stream Key" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-sm text-gray-400 mb-1">Waktu Mulai</label><input type="datetime-local" id="liveStart" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
+                    <div><label class="block text-sm text-gray-400 mb-1">Waktu Selesai</label><input type="datetime-local" id="liveEnd" class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
+                </div>
+                <div class="flex items-center gap-2 mt-2 bg-[#1f1f1f] p-3 rounded border border-[#3f3f3f]">
+                    <input type="checkbox" id="liveDaily" class="w-4 h-4 cursor-pointer">
+                    <label for="liveDaily" class="text-sm text-white cursor-pointer">🔁 Ulangi Otomatis Setiap Hari</label>
+                </div>
+                <button onclick="submitSchedule()" class="w-full bg-red-600 text-white font-semibold py-2 rounded hover:bg-red-700">Simpan Jadwal</button>
+                <p id="schedStatus" class="text-sm text-center mt-2 hidden"></p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-90 hidden flex justify-center items-center z-50">
+        <div class="bg-[#282828] rounded-xl w-full max-w-4xl p-4 border border-[#3f3f3f] relative"><button onclick="closePreview()" class="absolute -top-10 right-0 text-white hover:text-red-500 text-3xl">&times; Tutup</button><h3 id="previewTitle" class="text-lg font-semibold text-white mb-3">Preview</h3><video id="videoPlayer" controls class="w-full max-h-[70vh] rounded bg-black"><source id="videoSource" src="" type="video/mp4"></video></div>
+    </div>
+    
+    <script>
+        function openUploadModal() { document.getElementById('uploadModal').classList.remove('hidden'); }
+
+        async function openScheduleModal(presetVideoId = null, presetKey = '', editId = null, startTime = '', endTime = '', isDaily = false) {
+            document.getElementById('scheduleModal').classList.remove('hidden');
+            document.getElementById('schedStatus').classList.add('hidden');
+            
+            // Atur Tampilan (Mode Buat vs Mode Edit)
+            document.getElementById('modalLiveTitle').innerText = editId ? '✏️ Edit Jadwal Live' : 'Buat Jadwal Live';
+            document.getElementById('editStreamId').value = editId || '';
+            document.getElementById('liveKey').value = presetKey;
+            document.getElementById('liveStart').value = startTime.replace(' ', 'T'); 
+            document.getElementById('liveEnd').value = endTime.replace(' ', 'T');
+            document.getElementById('liveDaily').checked = isDaily;
+            
+            const select = document.getElementById('liveVideoSelect');
+            select.innerHTML = '<option value="">-- Memuat Video --</option>';
+            select.disabled = !!editId; // Kunci pilihan video jika mode edit
+            
+            try {
+                const res = await fetch('/api/videos');
+                const data = await res.json();
+                select.innerHTML = '<option value="">-- Pilih Video --</option>';
+                data.videos.forEach(v => {
+                    select.innerHTML += `<option value="${v.id}" ${presetVideoId == v.id ? 'selected' : ''}>${v.title}</option>`;
+                });
+            } catch(e) {}
+        }
+
+        async function submitSchedule() {
+            const editId = document.getElementById('editStreamId').value;
+            const videoId = document.getElementById('liveVideoSelect').value;
+            const streamKey = document.getElementById('liveKey').value;
+            const scheduledTime = document.getElementById('liveStart').value;
+            const endTime = document.getElementById('liveEnd').value;
+            const isDaily = document.getElementById('liveDaily').checked;
+            const statusText = document.getElementById('schedStatus');
+
+            if (!streamKey || !scheduledTime || !endTime || (!editId && !videoId)) {
+                alert('Tolong lengkapi semua form!'); return;
+            }
+
+            statusText.innerText = 'Menyimpan...';
+            statusText.classList.remove('hidden');
+            statusText.className = 'text-sm text-center mt-2 text-yellow-500 block';
+
+            try {
+                // Tentukan jalur: Jika edit gunakan Update API, jika baru gunakan Schedule API
+                const url = editId ? `/api/update/${editId}` : '/api/schedule';
+                const bodyData = editId ? { streamKey, scheduledTime, endTime, isDaily } : { videoId, streamKey, scheduledTime, endTime, isDaily };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+
+                statusText.innerText = '✔️ ' + (editId ? 'Diperbarui!' : 'Tersimpan!');
+                statusText.className = 'text-sm text-center mt-2 text-green-500 block';
+                
+                setTimeout(() => { window.location.reload(); }, 1000);
+            } catch (error) {
+                statusText.innerText = '❌ Gagal menyimpan.';
+                statusText.className = 'text-sm text-center mt-2 text-red-500 block';
+            }
+        }
+
+        // --- GLOBAL HAPUS API ---
+        async function hapusStream(id) {
+            if(!confirm('Hapus riwayat jadwal ini secara permanen?')) return;
+            try {
+                await fetch(`/api/delete/${id}`, { method: 'POST' });
+                window.location.reload();
+            } catch (error) { alert('Gagal menghapus.'); }
+        }
+
+        function openPreview(title, url) { document.getElementById('previewTitle').innerText = title; const p = document.getElementById('videoPlayer'); p.src = url; document.getElementById('previewModal').classList.remove('hidden'); p.play(); }
+        function closePreview() { const p = document.getElementById('videoPlayer'); p.pause(); p.src = ""; document.getElementById('previewModal').classList.add('hidden'); }
+    </script>
+</body>
+</html>

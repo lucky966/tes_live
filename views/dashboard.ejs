@@ -1,0 +1,64 @@
+<%- contentFor('pageTitle') %>
+Dashboard Ringkasan
+
+<%- contentFor('body') %>
+<section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="bg-[#1f1f1f] border border-[#3f3f3f] p-6 rounded-lg">
+        <h3 class="text-sm font-semibold text-gray-400 mb-2">LIVE AKTIF</h3>
+        <p class="text-4xl font-bold text-red-500">
+            <%= schedules.filter(s => s.status === 'live').length %>
+        </p>
+    </div>
+    <div class="bg-[#1f1f1f] border border-[#3f3f3f] p-6 rounded-lg">
+        <h3 class="text-sm font-semibold text-gray-400 mb-2">LIVE DIJADWALKAN</h3>
+        <p class="text-4xl font-bold text-blue-500">
+            <%= schedules.filter(s => s.status === 'pending').length %>
+        </p>
+    </div>
+</section>
+
+<section>
+    <h2 class="text-lg font-semibold mb-4 text-white">Siaran Sedang Berjalan & Masa Depan</h2>
+    <div id="dashboardScheduleContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <p class="text-gray-500 text-sm italic">Membaca status...</p>
+    </div>
+</section>
+
+<script>
+    // Fungsi monitoring otomatis untuk dashboard
+    async function loadDashboardSchedules() {
+        const container = document.getElementById('dashboardScheduleContainer');
+        try {
+            const response = await fetch('/api/active-and-pending');
+            const data = await response.json();
+
+            if (data.schedules.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-sm col-span-3">Tidak ada jadwal atau siaran yang aktif.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            data.schedules.forEach(stream => {
+                const isLive = stream.status === 'live';
+                const div = document.createElement('div');
+                div.className = `border p-4 rounded-lg flex flex-col justify-between ${isLive ? 'bg-red-900/10 border-red-500' : 'bg-[#1f1f1f] border-[#3f3f3f]'}`;
+                
+                div.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            ${isLive ? '<span class="animate-pulse h-3 w-3 bg-red-600 rounded-full"></span>' : '<span>⏳</span>'}
+                            <h3 class="font-medium text-white line-clamp-1">${stream.title}</h3>
+                        </div>
+                        <p class="text-xs text-gray-400 mb-1">Mulai: ${new Date(stream.scheduled_time).toLocaleString('id-ID')}</p>
+                        <p class="text-xs text-gray-400 mb-3">Selesai: ${new Date(stream.end_time).toLocaleString('id-ID')}</p>
+                        <p class="text-sm text-yellow-300 font-semibold mb-3">YouTube Live</p>
+                        ${stream.is_daily ? '<span class="bg-blue-900 text-blue-300 text-xs px-2 py-1 rounded">🔁 Diulang Setiap Hari</span>' : ''}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        } catch (error) { console.error('Gagal memuat dashboard:', error); }
+    }
+    loadDashboardSchedules();
+    setInterval(loadDashboardSchedules, 5000); // Auto-refresh monitoring setiap 5 detik
+</script>

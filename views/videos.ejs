@@ -1,0 +1,58 @@
+<%- contentFor('pageTitle') %>
+Koleksi Berkas Video
+
+<%- contentFor('body') %>
+<section>
+    <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] overflow-hidden">
+        <table class="w-full text-left text-sm">
+            <thead class="bg-[#282828] text-gray-400 border-b border-[#3f3f3f]">
+                <tr>
+                    <th class="p-4 font-medium">Video</th>
+                    <th class="p-4 font-medium">Thumbnail (Preview)</th>
+                    <th class="p-4 font-medium">Diupload</th>
+                </tr>
+            </thead>
+            <tbody id="gallery" class="divide-y divide-[#3f3f3f]">
+                </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+    // Fungsi untuk memuat video dalam tampilan tabel
+    async function loadVideos() {
+        const gallery = document.getElementById('gallery');
+        try {
+            const response = await fetch('/api/videos');
+            const data = await response.json();
+
+            if (data.videos.length === 0) {
+                gallery.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">Belum ada video. Silakan upload terlebih dahulu.</td></tr>';
+                return;
+            }
+
+            gallery.innerHTML = ''; 
+            data.videos.forEach(video => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-[#333333] transition border-b border-[#3f3f3f]';
+                const tanggalUpload = new Date(video.created_at).toLocaleDateString('id-ID');
+                const videoUrl = '/' + video.filepath.replace(/\\/g, '/');
+
+                tr.innerHTML = `
+                    <td class="p-4 flex flex-col">
+                        <p class="text-white font-medium line-clamp-1">${video.title}</p>
+                        <p class="text-xs text-gray-500">${video.filename}</p>
+                    </td>
+                    <td class="p-4">
+                        <div class="w-16 h-10 bg-black rounded flex flex-shrink-0 items-center justify-center border border-[#3f3f3f] cursor-pointer" onclick="openPreview('${video.title}', '${videoUrl}')">
+                            <span class="text-[10px] text-gray-400">▶ Play</span>
+                        </div>
+                    </td>
+                    <td class="p-4 text-gray-400">${tanggalUpload}</td>
+                `;
+                gallery.appendChild(tr);
+            });
+        } catch (error) { console.error('Error memuat video:', error); }
+    }
+    loadVideos();
+</script>
