@@ -9,26 +9,21 @@ const db = new sqlite3.Database(dbPath, (err) => {
         console.log('Berhasil terhubung ke database SQLite.');
         db.serialize(() => {
             db.run(`CREATE TABLE IF NOT EXISTS videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, filename TEXT NOT NULL, filepath TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            // TABEL BARU UNTUK MENYIMPAN AKUN YOUTUBE
+            db.run(`CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                filepath TEXT NOT NULL,
+                channel_name TEXT NOT NULL,
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                expiry_date INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )`);
 
-            // TABEL STREAMS DIPERBARUI: Tambah end_time dan is_daily
             db.run(`CREATE TABLE IF NOT EXISTS streams (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                video_id INTEGER,
-                platform_name TEXT NOT NULL,
-                stream_url TEXT NOT NULL,
-                stream_key TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                scheduled_time DATETIME,
-                end_time DATETIME,
-                is_daily INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (video_id) REFERENCES videos(id)
+                id INTEGER PRIMARY KEY AUTOINCREMENT, video_id INTEGER, platform_name TEXT NOT NULL, stream_url TEXT NOT NULL, stream_key TEXT NOT NULL, status TEXT DEFAULT 'pending', scheduled_time DATETIME, end_time DATETIME, is_daily INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (video_id) REFERENCES videos(id)
             )`);
         });
     }
