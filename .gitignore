@@ -1,4 +1,11 @@
+# Mengabaikan folder modul raksasa
 node_modules/
-uploads/
+
+# Mengabaikan file rahasia (PENTING!)
 .env
-token antigravy.txt
+
+# Mengabaikan folder video agar GitHub tidak penuh
+uploads/
+
+# Mengabaikan database lokal (agar PC baru mulai dari bersih)
+database.sqlite
