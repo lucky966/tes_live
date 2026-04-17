@@ -3,13 +3,19 @@ Koleksi Berkas Video
 
 <%- contentFor('body') %>
 <section>
-    <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] overflow-hidden">
+    <div class="flex justify-between items-center mb-4">
+        <p class="text-sm text-gray-400">Daftar semua video yang siap disiarkan.</p>
+        <select id="channelFilter" onchange="applyFilter()" class="bg-[#1f1f1f] border border-purple-800 text-white text-sm rounded p-2 focus:ring-purple-500 focus:border-purple-500 cursor-pointer shadow-lg">
+            <option value="ALL">-- 🔍 Tampilkan Semua Channel --</option>
+        </select>
+    </div>
+
+    <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] overflow-hidden shadow-lg">
         <table class="w-full text-left text-sm">
             <thead class="bg-[#282828] text-gray-400 border-b border-[#3f3f3f]">
                 <tr>
-                    <th class="p-4 font-medium">Video</th>
-                    <th class="p-4 font-medium">Thumbnail (Preview)</th>
-                    <th class="p-4 font-medium">Diupload</th>
+                    <th class="p-4 font-medium">Informasi Video</th>
+                    <th class="p-4 font-medium text-right">Aksi</th>
                 </tr>
             </thead>
             <tbody id="gallery" class="divide-y divide-[#3f3f3f]">
@@ -19,40 +25,92 @@ Koleksi Berkas Video
 </section>
 
 <script>
-    // Fungsi untuk memuat video dalam tampilan tabel
+    let globalVideos = [];
+
     async function loadVideos() {
         const gallery = document.getElementById('gallery');
         try {
             const response = await fetch('/api/videos');
             const data = await response.json();
+            globalVideos = data.videos;
 
-            if (data.videos.length === 0) {
-                gallery.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">Belum ada video. Silakan upload terlebih dahulu.</td></tr>';
-                return;
-            }
-
-            gallery.innerHTML = ''; 
-            data.videos.forEach(video => {
-                const tr = document.createElement('tr');
-                tr.className = 'hover:bg-[#333333] transition border-b border-[#3f3f3f]';
-                const tanggalUpload = new Date(video.created_at).toLocaleDateString('id-ID');
-                const videoUrl = '/' + video.filepath.replace(/\\/g, '/');
-
-                tr.innerHTML = `
-                    <td class="p-4 flex flex-col">
-                        <p class="text-white font-medium line-clamp-1">${video.title}</p>
-                        <p class="text-xs text-gray-500">${video.filename}</p>
-                    </td>
-                    <td class="p-4">
-                        <div class="w-16 h-10 bg-black rounded flex flex-shrink-0 items-center justify-center border border-[#3f3f3f] cursor-pointer" onclick="openPreview('${video.title}', '${videoUrl}')">
-                            <span class="text-[10px] text-gray-400">▶ Play</span>
-                        </div>
-                    </td>
-                    <td class="p-4 text-gray-400">${tanggalUpload}</td>
-                `;
-                gallery.appendChild(tr);
+            // Memperbarui isi Dropdown Filter dengan nama-nama channel yang ada
+            const filterSelect = document.getElementById('channelFilter');
+            const uniqueChannels = [...new Set(globalVideos.map(v => v.channel_name).filter(c => c))];
+            
+            // Pertahankan pilihan user jika sedang memfilter, lalu refresh list
+            const currentSelection = filterSelect.value;
+            filterSelect.innerHTML = '<option value="ALL">-- 🔍 Tampilkan Semua Channel --</option>';
+            uniqueChannels.forEach(channel => {
+                filterSelect.innerHTML += `<option value="${channel}">Hanya Channel: ${channel}</option>`;
             });
+            if(uniqueChannels.includes(currentSelection)) filterSelect.value = currentSelection;
+
+            applyFilter(); // Tampilkan tabel berdasarkan filter saat ini
         } catch (error) { console.error('Error memuat video:', error); }
     }
+
+    function renderTable(videos) {
+        const gallery = document.getElementById('gallery');
+        if (videos.length === 0) {
+            gallery.innerHTML = '<tr><td colspan="2" class="p-8 text-center text-gray-500">Tidak ada video yang ditemukan.</td></tr>';
+            return;
+        }
+
+        gallery.innerHTML = ''; 
+        videos.forEach(video => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-[#333333] transition border-b border-[#3f3f3f]';
+            const tanggalUpload = new Date(video.created_at).toLocaleDateString('id-ID');
+            const videoUrl = '/' + video.filepath.replace(/\\/g, '/');
+            
+            const channelBadge = video.channel_name ? `<span class="bg-purple-900/50 text-purple-300 text-[10px] px-2 py-1 rounded ml-2 border border-purple-800/50">Channel: ${video.channel_name}</span>` : '<span class="bg-gray-800 text-gray-400 text-[10px] px-2 py-1 rounded ml-2">Belum Terikat</span>';
+
+            tr.innerHTML = `
+                <td class="p-4">
+                    <div class="flex items-center mb-1">
+                        <p class="text-white font-medium text-base">${video.title}</p>
+                        ${channelBadge}
+                    </div>
+                    <p class="text-xs text-gray-500 mb-1">File: ${video.filename}</p>
+                    <p class="text-xs text-gray-600">Diupload: ${tanggalUpload}</p>
+                </td>
+                <td class="p-4">
+                    <div class="flex gap-2 justify-end">
+                        <button onclick="openPreview('${video.title}', '${videoUrl}')" class="bg-[#3f3f3f] text-white px-3 py-2 rounded text-xs hover:bg-blue-600 transition flex items-center gap-2 shadow">
+                            <span>▶</span> Preview
+                        </button>
+                        <button onclick="hapusVideo(${video.id})" class="bg-red-900/30 text-red-400 px-3 py-2 rounded text-xs hover:bg-red-800 hover:text-white transition flex items-center gap-2 shadow" title="Hapus Video">
+                            <span>🗑️</span> Hapus
+                        </button>
+                    </div>
+                </td>
+            `;
+            gallery.appendChild(tr);
+        });
+    }
+
+    // Fungsi untuk menyaring tampilan tabel
+    function applyFilter() {
+        const selectedChannel = document.getElementById('channelFilter').value;
+        if (selectedChannel === 'ALL') {
+            renderTable(globalVideos);
+        } else {
+            const filtered = globalVideos.filter(v => v.channel_name === selectedChannel);
+            renderTable(filtered);
+        }
+    }
+
+    // Fungsi menghapus video yang salah
+    async function hapusVideo(id) {
+        if(!confirm('Yakin ingin menghapus video ini secara permanen dari server?')) return;
+        try {
+            await fetch(`/api/videos/delete/${id}`, { method: 'POST' });
+            loadVideos(); // Segarkan tabel setelah menghapus
+        } catch (e) {
+            alert('Gagal menghapus video.');
+        }
+    }
+
     loadVideos();
 </script>

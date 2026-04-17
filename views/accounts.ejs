@@ -1,54 +1,140 @@
 <%- contentFor('pageTitle') %>
-🔗 Akun YouTube Tertaut
+    🔗 Akun YouTube Tertaut
 
-<%- contentFor('body') %>
-<section>
-    <div class="flex justify-between items-center mb-6 border-b border-[#3f3f3f] pb-2">
-        <h2 class="text-lg font-semibold text-white">Daftar Channel YouTube</h2>
-        <a href="/auth/google" class="bg-blue-600 text-white px-4 py-2 text-sm font-semibold rounded hover:bg-blue-700 transition">
-            + Tautkan Akun YouTube Baru
-        </a>
-    </div>
-    
-    <div id="accountsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <p class="text-gray-500 text-sm italic">Memuat akun...</p>
-    </div>
-</section>
+    <%- contentFor('body') %>
+        <section>
+            <div class="flex justify-between items-center mb-6 border-b border-[#3f3f3f] pb-2">
+                <h2 class="text-lg font-semibold text-white">Daftar Channel YouTube</h2>
+                <a href="/auth/google"
+                    class="bg-blue-600 text-white px-4 py-2 text-sm font-semibold rounded hover:bg-blue-700 transition">
+                    + Tautkan Akun YouTube Baru
+                </a>
+            </div>
+            <div id="accountsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <p class="text-gray-500 text-sm italic">Memuat akun...</p>
+            </div>
+        </section>
 
-<script>
-    async function loadAccounts() {
-        const container = document.getElementById('accountsContainer');
-        try {
-            const response = await fetch('/api/accounts');
-            const data = await response.json();
+        <div id="defaultAccountModal"
+            class="fixed inset-0 bg-black bg-opacity-70 hidden flex justify-center items-center z-50">
+            <div class="bg-[#282828] rounded-xl w-full max-w-lg p-6 border border-[#3f3f3f]">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">⚙️ Pengaturan Default Channel</h3>
+                    <button onclick="document.getElementById('defaultAccountModal').classList.add('hidden')"
+                        class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <p class="text-xs text-gray-400 mb-4">Data ini opsional. Jika diisi, akan otomatis muncul saat kamu
+                    membuat jadwal Live baru.</p>
 
-            if (data.accounts.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-sm col-span-3">Belum ada channel YouTube yang tertaut. Silakan klik tombol di atas.</p>'; return;
-            }
-
-            container.innerHTML = '';
-            data.accounts.forEach(acc => {
-                const div = document.createElement('div');
-                div.className = 'bg-[#1a1a1a] border border-[#3f3f3f] p-4 rounded-lg flex items-center justify-between';
-                div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xl">Y</div>
-                        <div>
-                            <h3 class="font-medium text-white">${acc.channel_name}</h3>
-                            <p class="text-xs text-green-400">Terkoneksi ✔️</p>
+                <div class="space-y-4">
+                    <input type="hidden" id="editAccountId">
+                    <div>
+                        <label class="block text-xs text-green-400 mb-1">Niche / Kategori Channel</label>
+                        <div class="flex gap-2">
+                            <select id="defNiche"
+                                class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm">
+                                <option value="">-- Pilih Kategori Channel --</option>
+                            </select>
+                            <button type="button" onclick="tambahKategoriBaru()"
+                                class="bg-[#3f3f3f] text-white px-3 rounded hover:bg-gray-600 font-bold"
+                                title="Tambah Kategori Baru">+</button>
                         </div>
                     </div>
-                    <button onclick="hapusAkun(${acc.id})" class="text-xs bg-[#3f3f3f] text-gray-400 px-3 py-1.5 rounded hover:bg-red-900 hover:text-white transition">Hapus</button>
+                    <div><label class="block text-xs text-gray-400 mb-1">Default Judul Live</label><input type="text"
+                            id="defTitle"
+                            class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
+                    <div><label class="block text-xs text-gray-400 mb-1">Default Deskripsi</label><textarea id="defDesc"
+                            rows="3"
+                            class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></textarea>
+                    </div>
+                    <div><label class="block text-xs text-gray-400 mb-1">Default Hashtag</label><input type="text"
+                            id="defTags"
+                            class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
+                    <button onclick="saveAccountDefaults()"
+                        class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 mt-2">Simpan
+                        Pengaturan</button>
+                    <p id="accStatus" class="text-sm text-center mt-2 hidden"></p>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let globalAccountsList = [];
+
+            async function loadAccounts() {
+                const container = document.getElementById('accountsContainer');
+                try {
+                    const response = await fetch('/api/accounts');
+                    const data = await response.json();
+                    globalAccountsList = data.accounts;
+
+                    if (data.accounts.length === 0) {
+                        container.innerHTML = '<p class="text-gray-500 text-sm col-span-3">Belum ada channel YouTube yang tertaut.</p>'; return;
+                    }
+
+                    container.innerHTML = '';
+                    data.accounts.forEach(acc => {
+                        const nicheBadge = acc.niche ? `<span class="bg-blue-900/50 text-blue-300 text-[10px] px-2 py-1 rounded ml-2">${acc.niche}</span>` : '';
+
+                        // MENDETEKSI FOTO PROFIL
+                        const avatarHtml = acc.profile_image_url
+                            ? `<img src="${acc.profile_image_url}" alt="Avatar" class="w-10 h-10 rounded-full flex-shrink-0 object-cover border border-[#3f3f3f]">`
+                            : `<div class="w-10 h-10 bg-red-600 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xl">${acc.channel_name.charAt(0).toUpperCase()}</div>`;
+
+                        const div = document.createElement('div');
+                        div.className = 'bg-[#1a1a1a] border border-[#3f3f3f] p-4 rounded-lg flex flex-col justify-between';
+                        div.innerHTML = `
+                    <div class="flex items-start gap-3 mb-4">
+                        ${avatarHtml}
+                        <div>
+                            <h3 class="font-medium text-white break-all">${acc.channel_name}</h3>
+                            <div class="flex items-center mt-1"><p class="text-[10px] text-green-400 border border-green-800 bg-green-900/20 px-1 rounded">Terkoneksi ✔️</p>${nicheBadge}</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 border-t border-[#3f3f3f] pt-3">
+                        <button onclick="openEditDefaults(${acc.id})" class="flex-grow text-xs bg-[#3f3f3f] text-gray-300 py-1.5 rounded hover:bg-blue-600 hover:text-white transition">⚙️ Atur Default</button>
+                        <button onclick="hapusAkun(${acc.id})" class="text-xs bg-red-900/30 text-red-400 px-3 py-1.5 rounded hover:bg-red-900 hover:text-white transition">Hapus</button>
+                    </div>
                 `;
-                container.appendChild(div);
-            });
-        } catch (error) { console.error(error); }
-    }
-    
-    async function hapusAkun(id) {
-        if(!confirm('Hapus tautan akun ini?')) return;
-        await fetch(`/api/accounts/delete/${id}`, { method: 'POST' });
-        loadAccounts();
-    }
-    loadAccounts();
-</script>
+                        container.appendChild(div);
+                    });
+                } catch (error) { }
+            }
+
+            function openEditDefaults(id) {
+                const acc = globalAccountsList.find(a => a.id === id);
+                if (!acc) return;
+                document.getElementById('editAccountId').value = acc.id;
+                document.getElementById('defNiche').value = acc.niche || '';
+                document.getElementById('defTitle').value = acc.default_title || '';
+                document.getElementById('defDesc').value = acc.default_desc || '';
+                document.getElementById('defTags').value = acc.default_tags || '';
+                document.getElementById('accStatus').classList.add('hidden');
+                document.getElementById('defaultAccountModal').classList.remove('hidden');
+            }
+
+            async function saveAccountDefaults() {
+                const id = document.getElementById('editAccountId').value;
+                const niche = document.getElementById('defNiche').value;
+                const default_title = document.getElementById('defTitle').value;
+                const default_desc = document.getElementById('defDesc').value;
+                const default_tags = document.getElementById('defTags').value;
+                const statusText = document.getElementById('accStatus');
+
+                statusText.innerText = 'Menyimpan...'; statusText.classList.remove('hidden'); statusText.className = 'text-sm text-center mt-2 text-yellow-500 block';
+                try {
+                    await fetch(`/api/accounts/update/${id}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ niche, default_title, default_desc, default_tags })
+                    });
+                    statusText.innerText = '✔️ Tersimpan!'; statusText.className = 'text-sm text-center mt-2 text-green-500 block';
+                    setTimeout(() => { document.getElementById('defaultAccountModal').classList.add('hidden'); loadAccounts(); }, 1000);
+                } catch (error) { statusText.innerText = '❌ Gagal menyimpan.'; statusText.className = 'text-sm text-center mt-2 text-red-500 block'; }
+            }
+
+            async function hapusAkun(id) {
+                if (!confirm('Hapus tautan akun ini?')) return;
+                await fetch(`/api/accounts/delete/${id}`, { method: 'POST' }); loadAccounts();
+            }
+            loadAccounts();
+        </script>
