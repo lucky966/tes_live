@@ -16,11 +16,11 @@ const activeStreams = new Map();
 const app = express();
 const PORT = process.env.PORT || 7575;
 
-const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-);
+// const oauth2Client = new google.auth.OAuth2(
+//     process.env.GOOGLE_CLIENT_ID,
+//     process.env.GOOGLE_CLIENT_SECRET,
+//     process.env.GOOGLE_REDIRECT_URI
+// );
 
 app.use(expressLayouts);
 app.set('layout', 'layout');
@@ -52,29 +52,88 @@ app.get('/archives', (req, res) => res.render('archives', { pageTitle: 'Arsip & 
 app.get('/accounts', (req, res) => res.render('accounts', { pageTitle: 'Akun YouTube Tertaut', currentPath: req.path }));
 
 // --- API AKUN ---
-app.get('/auth/google', (req, res) => {
-    const url = oauth2Client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', scope: ['https://www.googleapis.com/auth/youtube.force-ssl', 'https://www.googleapis.com/auth/youtube.readonly'] });
-    res.redirect(url);
-});
-app.get('/oauth2callback', async (req, res) => {
-    try {
-        const { tokens } = await oauth2Client.getToken(req.query.code);
-        oauth2Client.setCredentials(tokens);
-        
-        const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
-        const channelRes = await youtube.channels.list({ part: 'snippet', mine: true });
-        
-        // Tangkap Nama dan FOTO PROFIL
-        const channelName = channelRes.data.items[0].snippet.title;
-        const profileImg = channelRes.data.items[0].snippet.thumbnails.default.url;
+app.get('/settings', (req, res) => res.render('settings', { pageTitle: 'Pengaturan API Google', currentPath: req.path }));
 
-        // Simpan ke database beserta link fotonya
-        db.run(`INSERT INTO accounts (channel_name, access_token, refresh_token, expiry_date, profile_image_url) VALUES (?, ?, ?, ?, ?)`, 
-        [channelName, tokens.access_token, tokens.refresh_token, tokens.expiry_date, profileImg], function(err) {
-            res.send('<h3>Berhasil Terhubung!</h3><script>setTimeout(()=>window.location.href="/accounts", 2000)</script>');
-        });
-    } catch (error) { res.status(500).send('Gagal login: ' + error.message); }
+// CRUD GOOGLE PROJECTS
+app.get('/api/projects', (req, res) => db.all('SELECT * FROM google_projects ORDER BY id DESC', [], (err, rows) => res.json({ projects: rows || [] })));
+app.post('/api/projects/add', (req, res) => db.run(`INSERT INTO google_projects (name, client_id, client_secret, redirect_uri) VALUES (?, ?, ?, ?)`, [req.body.name, req.body.client_id, req.body.client_secret, req.body.redirect_uri], () => res.json({ message: 'Tersimpan' })));
+app.post('/api/projects/delete/:id', (req, res) => db.run('DELETE FROM google_projects WHERE id = ?', [req.params.id], () => res.json({ message: 'Terhapus' })));
+// --- API AKUN (MULTI-KEY OAUTH) ---
+app.get('/auth/google', (req, res) => {
+    const projectId = req.query.projectId;
+    if (!projectId) return res.send('Project ID tidak ditemukan.');
+
+    db.get('SELECT * FROM google_projects WHERE id = ?', [projectId], (err, project) => {
+        if (!project) return res.send('Kunci API tidak ada di database.');
+        const dynamicOauth = new google.auth.OAuth2(project.client_id, project.client_secret, project.redirect_uri);
+        // Trik: Kita titipkan ID API ini di parameter 'state' agar terbawa saat Google merespons
+        const url = dynamicOauth.generateAuthUrl({ access_type: 'offline', prompt: 'consent', scope: ['https://www.googleapis.com/auth/youtube.force-ssl', 'https://www.googleapis.com/auth/youtube.readonly'], state: projectId.toString() });
+        res.redirect(url);
+    });
 });
+
+app.get('/oauth2callback', (req, res) => {
+    const projectId = req.query.state; // ID API yang kita titipkan tadi
+    db.get('SELECT * FROM google_projects WHERE id = ?', [projectId], async (err, project) => {
+        if (!project) return res.send('Kunci API Hilang.');
+        const dynamicOauth = new google.auth.OAuth2(project.client_id, project.client_secret, project.redirect_uri);
+
+        try {
+            const { tokens } = await dynamicOauth.getToken(req.query.code);
+            dynamicOauth.setCredentials(tokens);
+            const youtube = google.youtube({ version: 'v3', auth: dynamicOauth });
+            const channelRes = await youtube.channels.list({ part: 'snippet', mine: true });
+            const channelName = channelRes.data.items[0].snippet.title;
+            const profileImg = channelRes.data.items[0].snippet.thumbnails.default.url;
+
+            // Simpan akun beserta PROJECT ID-nya
+            db.run(`INSERT INTO accounts (channel_name, access_token, refresh_token, expiry_date, profile_image_url, project_id) VALUES (?, ?, ?, ?, ?, ?)`,
+                [channelName, tokens.access_token, tokens.refresh_token, tokens.expiry_date, profileImg, projectId], function (err) {
+                    res.send('<h3>Berhasil Terhubung dengan API Khusus!</h3><script>setTimeout(()=>window.location.href="/accounts", 2000)</script>');
+                });
+        } catch (error) { res.status(500).send('Gagal login: ' + error.message); }
+    });
+});
+
+// --- API BUAT JADWAL YOUTUBE (DINAMIS) ---
+app.post('/api/schedule', upload.single('thumbnail'), async (req, res) => {
+    try {
+        const { editId, accountId, videoId, title, description, tags, streamKeyName, scheduledTime, endTime, isDaily } = req.body;
+        const isAI = req.body.isAI === 'true';
+
+        // CARI AKUN DAN GABUNGKAN DENGAN KUNCI API-NYA (JOIN TABLE)
+        db.get('SELECT accounts.*, google_projects.client_id, google_projects.client_secret, google_projects.redirect_uri FROM accounts JOIN google_projects ON accounts.project_id = google_projects.id WHERE accounts.id = ?', [accountId], async (err, account) => {
+            if (err || !account) return res.status(400).json({ message: 'Akun atau Kunci API sudah terhapus.' });
+
+            try {
+                // RAKIT MESIN YOUTUBE MENGGUNAKAN KUNCI SPESIFIK MILIK AKUN INI
+                const dynamicOauth = new google.auth.OAuth2(account.client_id, account.client_secret, account.redirect_uri);
+                dynamicOauth.setCredentials({ access_token: account.access_token, refresh_token: account.refresh_token, expiry_date: account.expiry_date });
+                const youtube = google.youtube({ version: 'v3', auth: dynamicOauth });
+
+                const finalDesc = isAI ? `${description}\n\n[Disclaimer: AI Generated]` : description;
+
+                const broadcastRes = await youtube.liveBroadcasts.insert({
+                    part: 'snippet,status,contentDetails', requestBody: { snippet: { title, description: finalDesc, scheduledStartTime: new Date(scheduledTime).toISOString(), scheduledEndTime: new Date(endTime).toISOString() }, status: { privacyStatus: 'public' }, contentDetails: { enableAutoStart: true, enableAutoStop: true } }
+                });
+
+                const streamRes = await youtube.liveStreams.insert({
+                    part: 'snippet,cdn', requestBody: { snippet: { title: streamKeyName }, cdn: { frameRate: '30fps', ingestionType: 'rtmp', resolution: '720p' } }
+                });
+
+                await youtube.liveBroadcasts.bind({ part: 'id', id: broadcastRes.data.id, streamId: streamRes.data.id });
+                if (req.file) await youtube.thumbnails.set({ videoId: broadcastRes.data.id, media: { mimeType: req.file.mimetype, body: fs.createReadStream(req.file.path) } });
+
+                if (editId && editId !== 'null' && editId !== '') {
+                    db.run(`UPDATE streams SET video_id=?, account_id=?, yt_title=?, yt_desc=?, platform_name='YouTube', stream_url=?, stream_key=?, scheduled_time=?, end_time=?, is_daily=?, status='pending' WHERE id=?`, [videoId, accountId, title, finalDesc, 'rtmp://a.rtmp.youtube.com/live2', streamRes.data.cdn.ingestionInfo.streamName, scheduledTime, endTime, isDaily === 'true' ? 1 : 0, editId], () => res.json({ message: 'Jadwal diperbarui!' }));
+                } else {
+                    db.run(`INSERT INTO streams (video_id, account_id, yt_title, yt_desc, platform_name, stream_url, stream_key, scheduled_time, end_time, is_daily, status) VALUES (?, ?, ?, ?, 'YouTube', ?, ?, ?, ?, ?, 'pending')`, [videoId, accountId, title, finalDesc, 'rtmp://a.rtmp.youtube.com/live2', streamRes.data.cdn.ingestionInfo.streamName, scheduledTime, endTime, isDaily === 'true' ? 1 : 0], () => res.json({ message: 'Live dibuat!' }));
+                }
+            } catch (error) { res.status(500).json({ message: 'Error API YouTube: ' + error.message }); }
+        });
+    } catch (error) { res.status(500).json({ message: 'Internal Server Error' }); }
+});
+
 app.get('/api/accounts', (req, res) => db.all('SELECT * FROM accounts ORDER BY id DESC', [], (err, rows) => res.json({ accounts: rows || [] })));
 app.post('/api/accounts/update/:id', (req, res) => {
     const { niche, default_title, default_desc, default_tags } = req.body;

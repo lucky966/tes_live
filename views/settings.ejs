@@ -1,0 +1,66 @@
+<%- contentFor('pageTitle') %>
+⚙️ Pengaturan API Google Cloud
+
+<%- contentFor('body') %>
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] p-6 lg:col-span-1 h-fit">
+        <h3 class="text-lg font-semibold text-white mb-4 border-b border-[#3f3f3f] pb-2">➕ Tambah Kunci API Baru</h3>
+        <div class="space-y-4">
+            <div><label class="block text-xs text-gray-400 mb-1">Nama Project (Bebas)</label><input type="text" id="apiName" placeholder="Misal: API Akun Utama" class="w-full bg-[#151515] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
+            <div><label class="block text-xs text-blue-400 mb-1">Client ID</label><input type="text" id="apiClientId" class="w-full bg-[#151515] border border-blue-800 rounded p-2 text-white text-sm font-mono"></div>
+            <div><label class="block text-xs text-red-400 mb-1">Client Secret</label><input type="password" id="apiSecret" class="w-full bg-[#151515] border border-red-800 rounded p-2 text-white text-sm font-mono"></div>
+            <div><label class="block text-xs text-gray-400 mb-1">Redirect URI</label><input type="text" id="apiRedirect" value="http://localhost:7575/oauth2callback" class="w-full bg-[#151515] border border-[#3f3f3f] rounded p-2 text-white text-sm font-mono"></div>
+            <button onclick="simpanApi()" class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition">Simpan Kunci API</button>
+        </div>
+    </div>
+
+    <div class="bg-[#1f1f1f] rounded-lg border border-[#3f3f3f] p-6 lg:col-span-2">
+        <h3 class="text-lg font-semibold text-white mb-4 border-b border-[#3f3f3f] pb-2">📋 Daftar Kunci API Google</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-gray-300">
+                <thead class="bg-[#282828] text-gray-400 border-b border-[#3f3f3f]">
+                    <tr><th class="p-3">Nama Project</th><th class="p-3">Client ID</th><th class="p-3 text-right">Aksi</th></tr>
+                </thead>
+                <tbody id="apiTableBody" class="divide-y divide-[#3f3f3f]">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<script>
+    async function loadApi() {
+        const tbody = document.getElementById('apiTableBody');
+        try {
+            const res = await fetch('/api/projects'); const data = await res.json();
+            if (data.projects.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">Belum ada Kunci API yang ditambahkan.</td></tr>'; return; }
+            tbody.innerHTML = '';
+            data.projects.forEach(p => {
+                const shortId = p.client_id.substring(0, 15) + '...';
+                tbody.innerHTML += `<tr class="hover:bg-[#333]">
+                    <td class="p-3 font-medium text-white">${p.name}</td>
+                    <td class="p-3 font-mono text-xs text-blue-300">${shortId}</td>
+                    <td class="p-3 text-right"><button onclick="hapusApi(${p.id})" class="text-xs bg-red-900/30 text-red-400 px-3 py-1.5 rounded hover:bg-red-800 hover:text-white transition">Hapus</button></td>
+                </tr>`;
+            });
+        } catch (e) {}
+    }
+
+    async function simpanApi() {
+        const name = document.getElementById('apiName').value;
+        const client_id = document.getElementById('apiClientId').value;
+        const client_secret = document.getElementById('apiSecret').value;
+        const redirect_uri = document.getElementById('apiRedirect').value;
+        if(!name || !client_id || !client_secret) return alert('Nama, Client ID, dan Secret wajib diisi!');
+        
+        await fetch('/api/projects/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, client_id, client_secret, redirect_uri}) });
+        document.getElementById('apiName').value = ''; document.getElementById('apiClientId').value = ''; document.getElementById('apiSecret').value = '';
+        loadApi();
+    }
+
+    async function hapusApi(id) {
+        if(!confirm('Hapus Kunci API ini? Akun yang menggunakan kunci ini mungkin akan error saat live.')) return;
+        await fetch(`/api/projects/delete/${id}`, { method: 'POST' }); loadApi();
+    }
+    loadApi();
+</script>
