@@ -7,12 +7,11 @@ const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegInstaller = require('ffmpeg-static');
-const { google } = require('googleapis');
 
-ffmpeg.setFfmpegPath(ffmpegInstaller);
+// Paksa gunakan FFmpeg resmi dari Ubuntu
+ffmpeg.setFfmpegPath('/usr/bin/ffmpeg'); const { google } = require('googleapis');
+
 const activeStreams = new Map();
-
 const app = express();
 const PORT = process.env.PORT || 7575;
 
