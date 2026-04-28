@@ -140,6 +140,30 @@
                         rows="2"
                         class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></textarea>
                 </div>
+                
+                <div class="form-group mb-4">
+                    <label class="block text-sm font-semibold text-gray-400 mb-2">Kategori Video</label>
+                    <select id="liveCategory" name="categoryId"
+                        class="w-full bg-[#1f1f1f] border border-[#3f3f3f] p-3 rounded-lg text-white">
+                        <option value="22">Blog & Orang</option>
+                        <option value="20">Game (Gaming)</option>
+                        <option value="24">Hiburan</option>
+                        <option value="10">Musik</option>
+                        <option value="25">Berita & Politik</option>
+                        <option value="27">Pendidikan</option>
+                        <option value="28">Sains & Teknologi</option>
+                    </select>
+                </div>
+
+                <div class="form-group mb-4">
+                    <label class="block text-sm font-semibold text-gray-400 mb-2">Konten Dimodifikasi
+                        (Sintesis/AI)?</label>
+                    <select id="liveAlteredContent" name="isAlteredContent"
+                        class="w-full bg-[#1f1f1f] border border-[#3f3f3f] p-3 rounded-lg text-white">
+                        <option value="false">Tidak - Konten ini asli</option>
+                        <option value="true">Ya - Konten ini diubah/dibuat dengan AI</option>
+                    </select>
+                </div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="block text-xs text-gray-400 mb-1">Hashtag (pisahkan koma)</label><input
@@ -153,11 +177,6 @@
                 <div><label class="block text-xs text-gray-400 mb-1">Upload Thumbnail (Opsional - JPG/PNG)</label><input
                         type="file" id="ytThumbnail" accept="image/*"
                         class="w-full text-sm text-gray-400 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:bg-[#3f3f3f] file:text-white cursor-pointer">
-                </div>
-
-                <div class="flex items-center gap-2 bg-[#1f1f1f] p-3 rounded border border-[#3f3f3f]">
-                    <input type="checkbox" id="ytIsAI" class="w-4 h-4 cursor-pointer">
-                    <label for="ytIsAI" class="text-xs text-white cursor-pointer">🤖 Tambahkan Label Konten AI</label>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
@@ -323,6 +342,10 @@
             const endTime = document.getElementById('liveEnd').value;
             const statusText = document.getElementById('schedStatus');
 
+            // Nilai Kategori dan AI akan berhasil ditangkap karena ID-nya sudah benar
+            const categoryId = document.getElementById('liveCategory').value;
+            const isAlteredContent = document.getElementById('liveAlteredContent').value;
+
             if (!accountId || !videoId || !title || !scheduledTime || !streamKeyName) { alert('Akun, Video, Judul, Waktu, dan Nama Stream Key wajib diisi!'); return; }
 
             statusText.innerText = '⏳ Memproses ke YouTube API...'; statusText.classList.remove('hidden'); statusText.className = 'text-sm text-center mt-2 text-yellow-500 block';
@@ -331,8 +354,11 @@
             formData.append('editId', editId); formData.append('accountId', accountId); formData.append('videoId', videoId);
             formData.append('title', title); formData.append('description', document.getElementById('ytDesc').value);
             formData.append('tags', document.getElementById('ytTags').value); formData.append('streamKeyName', streamKeyName);
-            formData.append('isAI', document.getElementById('ytIsAI').checked); formData.append('scheduledTime', scheduledTime);
+            formData.append('scheduledTime', scheduledTime);
             formData.append('endTime', endTime); formData.append('isDaily', document.getElementById('liveDaily').checked);
+
+            formData.append('categoryId', categoryId);
+            formData.append('isAlteredContent', isAlteredContent);
 
             const thumbnailFile = document.getElementById('ytThumbnail').files[0];
             if (thumbnailFile) formData.append('thumbnail', thumbnailFile);
