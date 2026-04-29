@@ -100,9 +100,16 @@ app.get('/oauth2callback', (req, res) => {
 });
 // --- API BUAT JADWAL YOUTUBE (DINAMIS DENGAN KATEGORI & AI) ---
 app.post('/api/schedule', upload.single('thumbnail'), async (req, res) => {
+
     try {
         const { editId, accountId, videoId, title, description, tags, streamKeyName, scheduledTime, endTime } = req.body;
         const isDaily = req.body.isDaily === 'true';
+        // Tambahkan baris logika Auto-Stop di bawahnya:
+        const isAutoStop = req.body.autoStop === 'true';
+
+        // Trik Cerdas: Jika Auto-Stop dimatikan, kita set waktu selesainya ke tahun 2099! 
+        // Sehingga server tidak akan pernah mematikannya secara otomatis.
+        const finalEndTime = isAutoStop ? endTime : '2099-12-31T23:59:00';
 
         // Tangkap Kategori & AI dari form Frontend
         const categoryId = req.body.categoryId || '22';
@@ -248,21 +255,42 @@ app.post('/api/reset', (req, res) => {
 });
 
 // --- CRON FFMPEG MESIN STREAMING ---
-function jalankanStreaming(videoPath, streamDestination, videoTitle, videoId, streamId) {
+// --- CRON FFMPEG MESIN STREAMING DENGAN AUTO-RECOVERY ---
+// Kita tambahkan parameter endTimeStr di belakangnya
+function jalankanStreaming(videoPath, streamDestination, videoTitle, videoId, streamId, endTimeStr) {
     console.log(`\n🚀 [MENCOBA STREAMING] Memulai tugas video: ${videoTitle}`);
-    console.log(`📂 [PATH VIDEO] : ${videoPath}`);
     console.log(`🌐 [TUJUAN]   : ${streamDestination}`);
 
+    // Menambahkan flag FLV agar FFmpeg lebih kebal terhadap error jaringan
     const command = ffmpeg(videoPath).inputOptions(['-re', '-stream_loop', '-1']).videoCodec('libx264').audioCodec('aac').format('flv')
-        .outputOptions(['-preset veryfast', '-maxrate 2500k', '-bufsize 5000k', '-pix_fmt yuv420p', '-g 50'])
+        .outputOptions(['-preset veryfast', '-maxrate 2500k', '-bufsize 5000k', '-pix_fmt yuv420p', '-g 50', '-flvflags no_duration_filesize'])
         .on('start', (cmd) => {
             console.log(`✅ [FFMPEG JALAN] Mesin berhasil menyala!`);
         })
         .on('error', (err, stdout, stderr) => {
-            console.error('\n❌ [FFMPEG GAGAL CRASH]:', err.message);
-            console.error('🔍 [ALASAN ASLI FFMPEG]:\n', stderr);
+            console.error('\n❌ [FFMPEG TERPUTUS]:', err.message);
             activeStreams.delete(videoId);
-            db.run(`UPDATE streams SET status = 'error' WHERE id = ?`, [streamId]);
+
+            // LOGIKA AUTO-RECOVERY (BANGKIT KEMBALI)
+            const waktuSekarang = new Date();
+            const batasWaktu = new Date(endTimeStr);
+
+            // Jika error terjadi SEBELUM jadwal selesai, berarti ini error jaringan/tidak disengaja
+            if (waktuSekarang < batasWaktu) {
+                console.log(`🔄 [AUTO RECOVERY] Jaringan berkedip! Menyalakan ulang stream ${videoTitle} dalam 5 detik...`);
+
+                setTimeout(() => {
+                    // Cek database dulu, pastikan user belum memencet tombol "Stop" manual
+                    db.get(`SELECT status FROM streams WHERE id = ?`, [streamId], (err, row) => {
+                        if (row && row.status === 'live') {
+                            // Panggil fungsi ini sendiri (Looping)
+                            jalankanStreaming(videoPath, streamDestination, videoTitle, videoId, streamId, endTimeStr);
+                        }
+                    });
+                }, 5000); // Jeda 5 detik agar port tidak tabrakan
+            } else {
+                db.run(`UPDATE streams SET status = 'error' WHERE id = ?`, [streamId]);
+            }
         })
         .on('end', () => {
             console.log(`🛑 [FFMPEG SELESAI] Video ${videoTitle} berakhir alami.`);
@@ -286,7 +314,7 @@ cron.schedule('* * * * *', () => {
             if (waktuSekarang >= waktuJadwal) {
                 console.log(`🎯 [DITEMUKAN] Waktunya tiba untuk: ${stream.title}! Menyiapkan mesin...`);
                 db.run(`UPDATE streams SET status = 'live' WHERE id = ?`, [stream.id]);
-                jalankanStreaming(path.resolve(__dirname, stream.filepath), `${stream.stream_url}/${stream.stream_key}`, stream.title, stream.video_id, stream.id);
+                jalankanStreaming(path.resolve(__dirname, stream.filepath), `${stream.stream_url}/${stream.stream_key}`, stream.title, stream.video_id, stream.id, stream.end_time);
             }
         });
     });

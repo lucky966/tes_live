@@ -140,7 +140,7 @@
                         rows="2"
                         class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></textarea>
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label class="block text-sm font-semibold text-gray-400 mb-2">Kategori Video</label>
                     <select id="liveCategory" name="categoryId"
@@ -187,10 +187,18 @@
                             type="datetime-local" id="liveEnd"
                             class="w-full bg-[#1f1f1f] border border-[#3f3f3f] rounded p-2 text-white text-sm"></div>
                 </div>
-                <div class="flex items-center gap-2 bg-[#1f1f1f] p-3 rounded border border-[#3f3f3f]">
-                    <input type="checkbox" id="liveDaily" class="w-4 h-4 cursor-pointer">
-                    <label for="liveDaily" class="text-xs text-white cursor-pointer">🔁 Ulangi Otomatis Setiap
-                        Hari</label>
+
+                <div class="flex flex-col gap-2 bg-[#1f1f1f] p-3 rounded border border-[#3f3f3f]">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="liveDaily" class="w-4 h-4 cursor-pointer">
+                        <label for="liveDaily" class="text-xs text-white cursor-pointer">🔁 Ulangi Otomatis Setiap
+                            Hari</label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="autoStop" checked class="w-4 h-4 cursor-pointer">
+                        <label for="autoStop" class="text-xs text-red-400 font-semibold cursor-pointer">🛑 Matikan Live
+                            Otomatis Saat Waktu Selesai</label>
+                    </div>
                 </div>
 
                 <button onclick="submitSchedule()"
@@ -356,7 +364,8 @@
             formData.append('tags', document.getElementById('ytTags').value); formData.append('streamKeyName', streamKeyName);
             formData.append('scheduledTime', scheduledTime);
             formData.append('endTime', endTime); formData.append('isDaily', document.getElementById('liveDaily').checked);
-
+            // Tambahkan baris ini di bawah formData.append('isDaily', ...);
+            formData.append('autoStop', document.getElementById('autoStop').checked);
             formData.append('categoryId', categoryId);
             formData.append('isAlteredContent', isAlteredContent);
 
