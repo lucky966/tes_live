@@ -288,10 +288,17 @@
         }
 
         // --- FUNGSI JADWAL & FILTER ---
-        async function openScheduleModal(presetVideoId = null, presetAccountId = null, presetTitle = '', presetDesc = '', editId = null) {
+        // --- FUNGSI JADWAL & FILTER ---
+        // PERBAIKAN: Tambahkan presetTags untuk menangkap hashtag lama
+        async function openScheduleModal(presetVideoId = null, presetAccountId = null, presetTitle = '', presetDesc = '', editId = null, presetTags = '') {
             document.getElementById('scheduleModal').classList.remove('hidden');
             document.getElementById('schedStatus').classList.add('hidden');
             document.getElementById('editStreamId').value = editId || '';
+
+            // PERBAIKAN UTAMA: Tempelkan data lama ke dalam kotak teks form!
+            document.getElementById('ytTitle').value = presetTitle || '';
+            document.getElementById('ytDesc').value = presetDesc || '';
+            if (presetTags) document.getElementById('ytTags').value = presetTags;
 
             const vSelect = document.getElementById('liveVideoSelect');
             vSelect.innerHTML = '<option value="">-- Pilih Akun YouTube Terlebih Dahulu --</option>';
@@ -313,21 +320,25 @@
                     aSelect.innerHTML += `<option value="${a.id}" ${presetAccountId == a.id ? 'selected' : ''}>${a.channel_name}${nicheLabel}</option>`;
                 });
 
-                if (presetAccountId) { applyAccountDefaults(presetVideoId); }
+                // PERBAIKAN: Kirim status "true" yang menandakan kita sedang 'Menggunakan Ulang'
+                if (presetAccountId) { applyAccountDefaults(presetVideoId, true); }
             } catch (e) { console.error(e); }
         }
 
-        function applyAccountDefaults(presetVideoId = null) {
+        // PERBAIKAN: Tambahkan parameter isReusing agar tidak menimpa data template lama
+        function applyAccountDefaults(presetVideoId = null, isReusing = false) {
             const accId = document.getElementById('liveAccountSelect').value;
             const vSelect = document.getElementById('liveVideoSelect');
 
             if (!accId) { vSelect.innerHTML = '<option value="">-- Pilih Akun YouTube Terlebih Dahulu --</option>'; return; }
 
             const acc = globalAccountsForAutoFill.find(a => a.id == accId);
-            if (acc && !document.getElementById('editStreamId').value) {
-                if (acc.default_title) document.getElementById('ytTitle').value = acc.default_title;
-                if (acc.default_desc) document.getElementById('ytDesc').value = acc.default_desc;
-                if (acc.default_tags) document.getElementById('ytTags').value = acc.default_tags;
+
+            // PERBAIKAN: Hanya pakai Default Akun JIKA BUKAN sedang 'Gunakan Ulang'
+            if (acc && !document.getElementById('editStreamId').value && !isReusing) {
+                if (acc.default_title && !document.getElementById('ytTitle').value) document.getElementById('ytTitle').value = acc.default_title;
+                if (acc.default_desc && !document.getElementById('ytDesc').value) document.getElementById('ytDesc').value = acc.default_desc;
+                if (acc.default_tags && !document.getElementById('ytTags').value) document.getElementById('ytTags').value = acc.default_tags;
             }
 
             vSelect.innerHTML = '<option value="">-- Pilih Video Dari Server --</option>';
@@ -336,10 +347,11 @@
             if (filteredVideos.length === 0) {
                 vSelect.innerHTML = '<option value="">-- Tidak ada video untuk channel ini --</option>';
             } else {
-                filteredVideos.forEach(v => { vSelect.innerHTML += `<option value="${v.id}" ${presetVideoId == v.id ? 'selected' : ''}>${v.title}</option>`; });
+                filteredVideos.forEach(v => {
+                    vSelect.innerHTML += `<option value="${v.id}" ${presetVideoId == v.id ? 'selected' : ''}>${v.title}</option>`;
+                });
             }
         }
-
         async function submitSchedule() {
             const editId = document.getElementById('editStreamId').value;
             const accountId = document.getElementById('liveAccountSelect').value;
